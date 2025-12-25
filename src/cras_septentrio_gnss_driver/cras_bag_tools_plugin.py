@@ -4,6 +4,7 @@
 import message_filters
 import rospy
 from cras_bag_tools import DeserializedMessageFilter
+from cras_bag_tools.message_filter import tags_for_generated_msg
 from gps_common.msg import GPSFix, GPSStatus
 from math import degrees, sqrt
 from sensor_msgs.msg import NavSatFix
@@ -23,8 +24,8 @@ class ComputeFixFromPVT(DeserializedMessageFilter):
         self.last_pvt = message_filters.Cache(message_filters.SimpleFilter(), 10)
         self.last_cov = message_filters.Cache(message_filters.SimpleFilter(), 10)
 
-    def filter(self, topic, msg, stamp, header):
-        result = [(topic, msg, stamp, header)]
+    def filter(self, topic, msg, stamp, header, tags):
+        result = [(topic, msg, stamp, header, tags)]
 
         is_pvt = topic == self.pvt_topic
         if is_pvt:
@@ -139,8 +140,9 @@ class ComputeFixFromPVT(DeserializedMessageFilter):
             self.last_cov.cache_msgs.remove(cov)
             self.last_cov.cache_times.remove(cov.header.stamp)
 
-            result.append((self.fix_topic, nav_msg, stamp, header))
-            result.append((self.fix_detail_topic, gps_msg, stamp, header))
+            gen_tags = tags_for_generated_msg(tags)
+            result.append((self.fix_topic, nav_msg, stamp, header, gen_tags))
+            result.append((self.fix_detail_topic, gps_msg, stamp, header, gen_tags))
 
         return result
 
