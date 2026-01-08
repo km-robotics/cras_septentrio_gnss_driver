@@ -380,7 +380,8 @@ struct SeptentrioProcess :
 #ifndef ROS2
           CRAS_INFO("Scaling covariance by %.2f", scale);
 #else
-          RCLCPP_INFO(this->get_logger(), "Scaling covariance by %.2f", scale);
+          auto& clk = *this->get_clock();
+          RCLCPP_INFO_THROTTLE(this->get_logger(), clk, 10000, "Scaling covariance by %.2f", scale);
 #endif
           mat = E * (scale * L) * E.transpose();
         }
