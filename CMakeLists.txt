@@ -83,6 +83,7 @@ elseif(ament_cmake_FOUND)
   unset(CATKIN_SYMLINK_INSTALL)
 
   find_package(ament_cmake REQUIRED)
+  find_package(Boost REQUIRED)
   find_package(rclcpp REQUIRED)
   find_package(rclcpp_components REQUIRED)
   find_package(compass_interfaces REQUIRED)
@@ -113,8 +114,27 @@ elseif(ament_cmake_FOUND)
   rclcpp_components_register_node(cras_septentrio_process PLUGIN "cras::SeptentrioProcess" EXECUTABLE process)
   add_dependencies(process cras_septentrio_process)
 
+  add_library(gps_azimuth_filter SHARED nodelets/gps_azimuth_filter.cpp)
+  target_link_libraries(gps_azimuth_filter
+    ${sensor_msgs_TARGETS}
+    rclcpp::rclcpp
+    rclcpp_components::component
+    tf2::tf2
+  )
+  target_include_directories(gps_azimuth_filter
+      PRIVATE
+      ${Boost_INCLUDE_DIRS})
+  rclcpp_components_register_node(gps_azimuth_filter PLUGIN "cras::GPSAzimuthFilter" EXECUTABLE gps_azimuth_filter_node)
+
   install(TARGETS cras_septentrio_process
     EXPORT cras_septentrio_process
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+  )
+
+  install(TARGETS gps_azimuth_filter
+    EXPORT gps_azimuth_filter
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
