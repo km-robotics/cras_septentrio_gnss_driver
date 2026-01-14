@@ -29,6 +29,7 @@ SPDX-FileCopyrightText: Czech Technical University in Prague
   <build_depend condition="$ROS_VERSION == 2">rclcpp</build_depend>
   <build_depend condition="$ROS_VERSION == 2">rclcpp_components</build_depend>
 
+  <build_depend>boost</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>nmea_msgs</build_depend>
   <build_depend>sensor_msgs</build_depend>

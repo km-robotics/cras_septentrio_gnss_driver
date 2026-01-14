@@ -13,6 +13,7 @@
  * the angular velocities are added to this IMU message. Accelerations are not used.
  */
 
+#include <algorithm>
 #include <functional>
 #include <limits>
 #include <memory>
