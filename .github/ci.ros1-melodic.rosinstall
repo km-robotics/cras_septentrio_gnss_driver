@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # SPDX-FileCopyrightText: Czech Technical University in Prague
 - git:
+    local-name: ros-utils
+    uri: https://github.com/ctu-vras/ros-utils.git
+    version: master
+- git:
     local-name: compass
     uri: https://github.com/ctu-vras/compass.git
     version: master
