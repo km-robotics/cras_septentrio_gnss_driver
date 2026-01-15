@@ -63,8 +63,7 @@ SPDX-FileCopyrightText: Czech Technical University in Prague
   <test_depend condition="$ROS_VERSION == 1">roslaunch</test_depend>
   <test_depend condition="$ROS_VERSION == 1">roslint</test_depend>
 
-  <test_depend condition="$ROS_VERSION == 2">ament_lint_auto</test_depend>
-  <test_depend condition="$ROS_VERSION == 2">ament_lint_common</test_depend>
+  <test_depend condition="$ROS_VERSION == 2">cras_lint</test_depend>
 
   <export>
     <nodelet plugin="${prefix}/nodelets.xml" condition="$ROS_VERSION == 1" />
