@@ -1,13 +1,23 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<!--
-SPDX-License-Identifier: BSD-3-Clause
-SPDX-FileCopyrightText: Czech Technical University in Prague
--->
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: BSD-3-Clause -->
+<!-- SPDX-FileCopyrightText: Czech Technical University in Prague -->
 
-<library path="lib/libcras_septentrio_process">
-  <class name="cras_septentrio_gnss_driver/process" type="cras::SeptentrioProcess" base_class_type="nodelet::Nodelet">
-    <description>
-      Improved Septentrio GNSS driver providing more standardized ROS output
-    </description>
-  </class>
-</library>
+<class_libraries>
+
+  <library path="lib/libcras_septentrio_process">
+    <class name="cras_septentrio_gnss_driver/process" type="cras::SeptentrioProcess" base_class_type="nodelet::Nodelet">
+      <description>
+        Improved Septentrio GNSS driver providing more standardized ROS output
+      </description>
+    </class>
+  </library>
+
+  <library path="lib/libgps_azimuth_filter">
+    <class name="cras_septentrio_gnss_driver/gps_azimuth_filter" type="cras::GPSAzimuthFilter" base_class_type="nodelet::Nodelet">
+      <description>
+        Filter for intermittent jumps in GNSS heading
+      </description>
+    </class>
+  </library>
+
+</class_libraries>

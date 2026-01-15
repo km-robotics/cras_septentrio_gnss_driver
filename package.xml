@@ -29,6 +29,7 @@ SPDX-FileCopyrightText: Czech Technical University in Prague
   <build_depend condition="$ROS_VERSION == 2">rclcpp</build_depend>
   <build_depend condition="$ROS_VERSION == 2">rclcpp_components</build_depend>
 
+  <build_depend>boost</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>nmea_msgs</build_depend>
   <build_depend>sensor_msgs</build_depend>
@@ -62,8 +63,7 @@ SPDX-FileCopyrightText: Czech Technical University in Prague
   <test_depend condition="$ROS_VERSION == 1">roslaunch</test_depend>
   <test_depend condition="$ROS_VERSION == 1">roslint</test_depend>
 
-  <test_depend condition="$ROS_VERSION == 2">ament_lint_auto</test_depend>
-  <test_depend condition="$ROS_VERSION == 2">ament_lint_common</test_depend>
+  <test_depend condition="$ROS_VERSION == 2">cras_lint</test_depend>
 
   <export>
     <nodelet plugin="${prefix}/nodelets.xml" condition="$ROS_VERSION == 1" />

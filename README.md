@@ -55,3 +55,24 @@ The fixed topics in the empty namespace, e.g. `atteuler`. In addition to them, t
 - `~min_heading_error_deg` (double, default 0 deg): Minimum error of heading. Lower errors will be reported as this value.
 - `~publish_invalid_fix` (bool, default true): If true, even invalid fix messages will be published. The reader must check the `status.status` field for `NO_FIX` value to figure out validity of the message.
 - `~publish_invalid_heading` (bool, default false): Whether to publish invalid heading messages (with NaNs or high covariance).
+
+### cras_septentrio_gnss_driver/gps_azimuth_filter
+
+Filter for intermittent jumps in GNSS heading.
+
+#### Subscribed topics
+
+- `gps/azimuth_imu` (`sensor_msgs/Imu`): Septentrio IMU message with filled orientation containing heading and pitch in ENU.
+- `imu/data` (`sensor_msgs/Imu`): Inertial unit data with computed orientation.
+
+#### Published topics
+
+The fixed topics in the empty namespace, e.g. `atteuler`. In addition to them, these other topics are published:
+
+- `gps/azimuth_imu/filtered` (`sensor_msgs/Imu`): The filtered heading messages.
+
+#### Parameters
+
+- `~max_msg_timestamp_delta` (double, default 0.2 s): Maximum age of inertial heading that should be compared with GNSS heading. Older messages are not filtered.
+- `~max_offset_delta` (double, default pi/2 rad): The angular offset between inertial and GNSS heading that separates good and bad measurements.
+- `~max_wrong_msgs_in_row` (int, default 10): If this number of measurements in a row are considered bad, they become the new good values.

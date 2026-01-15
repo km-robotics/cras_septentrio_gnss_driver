@@ -5,7 +5,8 @@ cmake_minimum_required(VERSION 3.10.2)
 project(cras_septentrio_gnss_driver)
 
 find_package(ament_cmake QUIET)
-find_package(catkin QUIET)  # catkin_lint: ignore missing_required
+#catkin_lint: ignore_once missing_required
+find_package(catkin QUIET)
 
 if(catkin_FOUND)
   set(CMAKE_CXX_STANDARD 17)
@@ -24,6 +25,8 @@ if(catkin_FOUND)
     tf2_geometry_msgs
   )
 
+  find_package(Boost REQUIRED)
+
   catkin_python_setup()
 
   catkin_package()
@@ -35,7 +38,12 @@ if(catkin_FOUND)
   target_link_libraries(cras_septentrio_process ${catkin_LIBRARIES})
   cras_node_from_nodelet(cras_septentrio_process cras::SeptentrioProcess OUTPUT_NAME process)
 
-  install(TARGETS cras_septentrio_process
+  add_library(gps_azimuth_filter nodelets/gps_azimuth_filter.cpp)
+  add_dependencies(gps_azimuth_filter ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+  target_link_libraries(gps_azimuth_filter ${catkin_LIBRARIES} Boost::boost)
+  cras_node_from_nodelet(gps_azimuth_filter cras::GPSAzimuthFilter OUTPUT_NAME gps_azimuth_filter_node)
+
+  install(TARGETS cras_septentrio_process gps_azimuth_filter
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
     RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
@@ -83,38 +91,40 @@ elseif(ament_cmake_FOUND)
   unset(CATKIN_SYMLINK_INSTALL)
 
   find_package(ament_cmake REQUIRED)
-  find_package(rclcpp REQUIRED)
-  find_package(rclcpp_components REQUIRED)
   find_package(compass_interfaces REQUIRED)
   find_package(geometry_msgs REQUIRED)
   find_package(gps_msgs REQUIRED)
   find_package(nmea_msgs REQUIRED)
+  find_package(rclcpp REQUIRED)
+  find_package(rclcpp_components REQUIRED)
   find_package(sensor_msgs REQUIRED)
   find_package(septentrio_gnss_driver REQUIRED)
   find_package(tf2 REQUIRED)
   find_package(tf2_geometry_msgs REQUIRED)
 
-  set(dependencies
-    rclcpp::rclcpp
-    rclcpp_components::component
-    tf2::tf2
-    tf2_geometry_msgs::tf2_geometry_msgs
-    ${compass_interfaces_TARGETS}
-    ${geometry_msgs_TARGETS}
-    ${gps_msgs_TARGETS}
-    ${nmea_msgs_TARGETS}
-    ${sensor_msgs_TARGETS}
-    ${septentrio_gnss_driver_TARGETS}
-  )
+  find_package(Boost REQUIRED)
 
   add_library(cras_septentrio_process SHARED nodelets/septentrio_process.cpp)
-  target_link_libraries(cras_septentrio_process ${dependencies})
+  target_link_libraries(cras_septentrio_process
+    rclcpp::rclcpp rclcpp_components::component tf2::tf2 tf2_geometry_msgs::tf2_geometry_msgs
+    ${compass_interfaces_TARGETS} ${geometry_msgs_TARGETS} ${gps_msgs_TARGETS} ${nmea_msgs_TARGETS}
+    ${sensor_msgs_TARGETS} ${septentrio_gnss_driver_TARGETS}
+  )
   target_compile_definitions(cras_septentrio_process PRIVATE ROS2)
   rclcpp_components_register_node(cras_septentrio_process PLUGIN "cras::SeptentrioProcess" EXECUTABLE process)
   add_dependencies(process cras_septentrio_process)
 
-  install(TARGETS cras_septentrio_process
-    EXPORT cras_septentrio_process
+  add_library(gps_azimuth_filter SHARED nodelets/gps_azimuth_filter.cpp)
+  target_link_libraries(gps_azimuth_filter
+    Boost::boost
+    rclcpp::rclcpp rclcpp_components::component tf2::tf2
+    ${sensor_msgs_TARGETS}
+  )
+  target_compile_definitions(gps_azimuth_filter PRIVATE ROS2)
+  rclcpp_components_register_node(gps_azimuth_filter PLUGIN "cras::GPSAzimuthFilter" EXECUTABLE gps_azimuth_filter_node)
+  add_dependencies(gps_azimuth_filter_node gps_azimuth_filter)
+
+  install(TARGETS cras_septentrio_process gps_azimuth_filter
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
@@ -136,10 +146,10 @@ elseif(ament_cmake_FOUND)
   )
 
   if(BUILD_TESTING)
-    find_package(ament_lint_auto REQUIRED)
-    list(APPEND AMENT_LINT_AUTO_EXCLUDE ament_cmake_cpplint ament_cmake_copyright ament_cmake_uncrustify)
-    ament_lint_auto_find_test_dependencies()
-    # ament_cpplint(MAX_LINE_LENGTH 120 FILTERS "-readability/namespace")
+    find_package(cras_lint REQUIRED)
+    cras_lint_common()
+    cras_lint_cpp(SKIP_UNCRUSTIFY)
+    cras_lint_py()
   endif()
 
   ament_package()

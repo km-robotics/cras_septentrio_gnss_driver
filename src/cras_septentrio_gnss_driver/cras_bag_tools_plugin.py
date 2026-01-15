@@ -1,30 +1,32 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # SPDX-FileCopyrightText: Czech Technical University in Prague
 
-import message_filters
-import rospy
+from math import degrees, sqrt
+
 from cras_bag_tools import DeserializedMessageFilter
 from cras_bag_tools.message_filter import tags_for_generated_msg
 from gps_common.msg import GPSFix, GPSStatus
-from math import degrees, sqrt
+import message_filters
+import rospy
 from sensor_msgs.msg import NavSatFix
+
 
 class ComputeFixFromPVT(DeserializedMessageFilter):
 
     def __init__(self, source_topic_prefix, fix_topic, fix_detail_topic=None, **kwargs):
-        self.pvt_topic = rospy.names.ns_join(source_topic_prefix, "pvtgeodetic")
-        self.cov_topic = rospy.names.ns_join(source_topic_prefix, "poscovgeodetic")
+        self.pvt_topic = rospy.names.ns_join(source_topic_prefix, 'pvtgeodetic')
+        self.cov_topic = rospy.names.ns_join(source_topic_prefix, 'poscovgeodetic')
         super(ComputeFixFromPVT, self).__init__(include_topics=[self.pvt_topic, self.cov_topic], **kwargs)
 
         self.fix_topic = fix_topic
         self.fix_detail_topic = fix_detail_topic
         if fix_detail_topic is None:
-            self.fix_detail_topic = self.fix_topic + "_detail"
+            self.fix_detail_topic = self.fix_topic + '_detail'
 
         self.last_pvt = message_filters.Cache(message_filters.SimpleFilter(), 10)
         self.last_cov = message_filters.Cache(message_filters.SimpleFilter(), 10)
 
-    def filter(self, topic, msg, stamp, header, tags):
+    def filter(self, topic, msg, stamp, header, tags):  # noqa: A003
         result = [(topic, msg, stamp, header, tags)]
 
         is_pvt = topic == self.pvt_topic
@@ -132,7 +134,7 @@ class ComputeFixFromPVT(DeserializedMessageFilter):
             gps_msg.err = 2 * sqrt(cov.cov_latlat + cov.cov_lonlon + cov.cov_hgthgt)
             gps_msg.err_horz = 2 * sqrt(cov.cov_latlat + cov.cov_lonlon)
             gps_msg.err_vert = 2 * sqrt(cov.cov_hgthgt)
-            gps_msg.err_track = 2 * (sqrt(pow(1.0 / (pvt.vn + pow(pvt.ve, 2) / pvt.vn), 2) * cov.cov_lonlon + \
+            gps_msg.err_track = 2 * (sqrt(pow(1.0 / (pvt.vn + pow(pvt.ve, 2) / pvt.vn), 2) * cov.cov_lonlon +
                                           pow(pvt.ve / (pow(pvt.vn, 2) + pow(pvt.ve, 2)), 2) * cov.cov_latlat))
 
             self.last_pvt.cache_msgs.remove(pvt)
@@ -163,4 +165,4 @@ class ComputeFixFromPVT(DeserializedMessageFilter):
         parent_params = super(ComputeFixFromPVT, self)._str_params()
         if len(parent_params) > 0:
             parts.append(parent_params)
-        return ", ".join(parts)
+        return ', '.join(parts)

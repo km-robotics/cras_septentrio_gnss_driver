@@ -13,6 +13,7 @@
  * the angular velocities are added to this IMU message. Accelerations are not used.
  */
 
+#include <algorithm>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -67,8 +68,8 @@
 #include <septentrio_gnss_driver/msg/pvt_geodetic.hpp>
 #include <septentrio_gnss_driver/msg/rf_status.hpp>
 #include <septentrio_gnss_driver/msg/vel_cov_geodetic.hpp>
-#include <tf2/convert.h>
-#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/convert.hpp>
+#include <tf2/LinearMath/Quaternion.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #endif
