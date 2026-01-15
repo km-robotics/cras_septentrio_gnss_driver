@@ -27,18 +27,20 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Transform.h>
 
 #else
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/LinearMath/Matrix3x3.hpp>
+#include <tf2/LinearMath/Transform.hpp>
 
 #endif
-
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Matrix3x3.h>
-#include <tf2/LinearMath/Transform.h>
 
 #ifndef ROS2
 
