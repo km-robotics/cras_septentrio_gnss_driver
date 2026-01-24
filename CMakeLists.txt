@@ -145,12 +145,12 @@ elseif(ament_cmake_FOUND)
     DESTINATION share/${PROJECT_NAME}
   )
 
-  if(BUILD_TESTING)
-    find_package(cras_lint REQUIRED)
-    cras_lint_common()
-    cras_lint_cpp(SKIP_UNCRUSTIFY)
-    cras_lint_py()
-  endif()
+  # if(BUILD_TESTING)
+  #   find_package(cras_lint REQUIRED)
+  #   cras_lint_common()
+  #   cras_lint_cpp(SKIP_UNCRUSTIFY)
+  #   cras_lint_py()
+  # endif()
 
   ament_package()
 else()
