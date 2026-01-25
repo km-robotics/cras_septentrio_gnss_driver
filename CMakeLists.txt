@@ -101,6 +101,8 @@ elseif(ament_cmake_FOUND)
   find_package(septentrio_gnss_driver REQUIRED)
   find_package(tf2 REQUIRED)
   find_package(tf2_geometry_msgs REQUIRED)
+  find_package(geodesy REQUIRED)
+  find_package(geographic_msgs REQUIRED)
 
   find_package(Boost REQUIRED)
 
@@ -110,6 +112,11 @@ elseif(ament_cmake_FOUND)
     ${compass_interfaces_TARGETS} ${geometry_msgs_TARGETS} ${gps_msgs_TARGETS} ${nmea_msgs_TARGETS}
     ${sensor_msgs_TARGETS} ${septentrio_gnss_driver_TARGETS}
   )
+  ament_target_dependencies(cras_septentrio_process
+    geodesy
+    geographic_msgs
+  )
+
   target_compile_definitions(cras_septentrio_process PRIVATE ROS2)
   rclcpp_components_register_node(cras_septentrio_process PLUGIN "cras::SeptentrioProcess" EXECUTABLE process)
   add_dependencies(process cras_septentrio_process)

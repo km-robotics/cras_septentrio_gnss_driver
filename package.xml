@@ -25,6 +25,8 @@ SPDX-FileCopyrightText: Czech Technical University in Prague
 
   <build_depend condition="$ROS_VERSION == 2">ament_cmake_ros</build_depend>
   <build_depend condition="$ROS_VERSION == 2">compass_interfaces</build_depend>
+  <build_depend condition="$ROS_VERSION == 2">geodesy</build_depend>
+  <build_depend condition="$ROS_VERSION == 2">geographic_msgs</build_depend>
   <build_depend condition="$ROS_VERSION == 2">gps_msgs</build_depend>
   <build_depend condition="$ROS_VERSION == 2">rclcpp</build_depend>
   <build_depend condition="$ROS_VERSION == 2">rclcpp_components</build_depend>

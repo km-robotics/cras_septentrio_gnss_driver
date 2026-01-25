@@ -53,6 +53,8 @@
 #else
 
 #include <compass_interfaces/msg/azimuth.hpp>
+#include <geodesy/utm.h>
+#include <geographic_msgs/msg/geo_pose.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
@@ -248,6 +250,10 @@ struct SeptentrioProcess :
     this->posePub = this->advertise<PoseWithCovarianceStamped>("pose", 10);
     this->poseSub = this->subscribe<PoseWithCovarianceStamped>(
         "raw/pose", 10, &SeptentrioProcess::processPose, this);
+#ifdef ROS2
+    // Publish relative UTM pose separately ((0, 0) is the UTM Zone center (with MGRS).
+    this->poseRelativeUtmPub = this->advertise<PoseWithCovarianceStamped>("pose_relative_utm", 10);
+#endif
     this->twistPub = this->advertise<TwistWithCovarianceStamped>("twist", 10);
     this->twistSub = this->subscribe<TwistWithCovarianceStamped>(
         "raw/twist", 10, &SeptentrioProcess::processTwist, this);
@@ -681,6 +687,37 @@ struct SeptentrioProcess :
     for (auto& v : outMsg.pose.covariance) invalid |= fixNan(v);
     if (invalid) return;
     this->posePub.publish(outMsg);
+
+#ifdef ROS2
+    // Compute and publish UTM-relative pose
+    try {
+      // Convert input pose position (longitude, latitude, height) to UTM
+      geographic_msgs::msg::GeoPose geo_pose;
+      geo_pose.position.latitude = outMsg.pose.pose.position.y;   // latitude
+      geo_pose.position.longitude = outMsg.pose.pose.position.x;  // longitude
+      geo_pose.position.altitude = outMsg.pose.pose.position.z;   // height
+      geo_pose.orientation = outMsg.pose.pose.orientation;
+
+      // Convert to UTM using geodesy
+      geodesy::UTMPoint utm(geo_pose.position);
+
+      // Find the center of the MGRS zone for this UTM point
+      geodesy::UTMPoint mgrs_center;
+      mgrs_center.zone = utm.zone;
+      mgrs_center.band = utm.band;
+      mgrs_center.easting = 500'000.0; // UTM zone center easting, meters.
+      mgrs_center.northing = (utm.northing >= 0 ? 10'000'000.0 : 0.0); // zone center northing, meters.
+
+      // Compute relative UTM pose
+      geometry_msgs::msg::PoseWithCovarianceStamped utm_pose = outMsg;
+      utm_pose.pose.pose.position.x = utm.easting - mgrs_center.easting;
+      utm_pose.pose.pose.position.y = utm.northing - mgrs_center.northing;
+      utm_pose.pose.pose.position.z = utm.altitude;
+      this->poseRelativeUtmPub.publish(utm_pose);
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(this->get_logger(), "Failed to convert pose to UTM: %s", e.what());
+    }
+#endif
   }
 
   void processTwist(const geometry_msgs::msg::TwistWithCovarianceStamped& msg) const
@@ -773,6 +810,9 @@ struct SeptentrioProcess :
 
   Subscriber<geometry_msgs::msg::PoseWithCovarianceStamped> poseSub;
   Publisher<geometry_msgs::msg::PoseWithCovarianceStamped> posePub;
+#ifdef ROS2
+  Publisher<geometry_msgs::msg::PoseWithCovarianceStamped> poseRelativeUtmPub;
+#endif
 
   Subscriber<geometry_msgs::msg::TwistWithCovarianceStamped> twistSub;
   Publisher<geometry_msgs::msg::TwistWithCovarianceStamped> twistPub;
