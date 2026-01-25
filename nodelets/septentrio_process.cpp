@@ -27,7 +27,9 @@
 #include <compass_msgs/Azimuth.h>
 #include <cras_cpp_common/nodelet_utils.hpp>
 #include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Quaternion.h>
+#include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <gps_common/GPSFix.h>
 #include <nmea_msgs/Gpgga.h>
 #include <nmea_msgs/Gprmc.h>
@@ -52,7 +54,9 @@
 
 #include <compass_interfaces/msg/azimuth.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 #include <gps_msgs/msg/gps_fix.hpp>
 #include <nmea_msgs/msg/gpgga.hpp>
 #include <nmea_msgs/msg/gprmc.hpp>
@@ -76,6 +80,8 @@
 
 #ifndef ROS2
 using compass_msgs::Azimuth;
+using geometry_msgs::PoseWithCovarianceStamped;
+using geometry_msgs::TwistWithCovarianceStamped;
 using gps_common::GPSFix;
 using nmea_msgs::Gpgga;
 using nmea_msgs::Gprmc;
@@ -101,6 +107,8 @@ template<typename T> using Subscriber = ros::Subscriber;
 #else
 
 using compass_interfaces::msg::Azimuth;
+using geometry_msgs::msg::PoseWithCovarianceStamped;
+using geometry_msgs::msg::TwistWithCovarianceStamped;
 using gps_msgs::msg::GPSFix;
 using nmea_msgs::msg::Gpgga;
 using nmea_msgs::msg::Gprmc;
@@ -236,6 +244,13 @@ struct SeptentrioProcess :
 
     this->azimuthPub = this->advertise<Azimuth>("azimuth", 10);
     this->imuPub = this->advertise<Imu>("azimuth_imu", 10);
+
+    this->posePub = this->advertise<PoseWithCovarianceStamped>("pose", 10);
+    this->poseSub = this->subscribe<PoseWithCovarianceStamped>(
+        "raw/pose", 10, &SeptentrioProcess::processPose, this);
+    this->twistPub = this->advertise<TwistWithCovarianceStamped>("twist", 10);
+    this->twistSub = this->subscribe<TwistWithCovarianceStamped>(
+        "raw/twist", 10, &SeptentrioProcess::processTwist, this);
   }
 
 #ifndef ROS2
@@ -651,6 +666,40 @@ struct SeptentrioProcess :
     this->pvtGeodeticPub.publish(outMsg);
   }
 
+  void processPose(const geometry_msgs::msg::PoseWithCovarianceStamped& msg) const
+  {
+    UPDATE_THREAD_NAME
+    auto outMsg = msg;
+    bool invalid = false;
+    invalid |= fixNan(outMsg.pose.pose.position.x);
+    invalid |= fixNan(outMsg.pose.pose.position.y);
+    invalid |= fixNan(outMsg.pose.pose.position.z);
+    invalid |= fixNan(outMsg.pose.pose.orientation.x);
+    invalid |= fixNan(outMsg.pose.pose.orientation.y);
+    invalid |= fixNan(outMsg.pose.pose.orientation.z);
+    invalid |= fixNan(outMsg.pose.pose.orientation.w);
+    for (auto& v : outMsg.pose.covariance) invalid |= fixNan(v);
+    if (invalid) return;
+    this->posePub.publish(outMsg);
+  }
+
+  void processTwist(const geometry_msgs::msg::TwistWithCovarianceStamped& msg) const
+  {
+    UPDATE_THREAD_NAME
+    auto outMsg = msg;
+    bool invalid = false;
+    invalid |= fixNan(outMsg.twist.twist.linear.x);
+    invalid |= fixNan(outMsg.twist.twist.linear.y);
+    invalid |= fixNan(outMsg.twist.twist.linear.z);
+    invalid |= fixNan(outMsg.twist.twist.angular.x);
+    invalid |= fixNan(outMsg.twist.twist.angular.y);
+    invalid |= fixNan(outMsg.twist.twist.angular.z);
+    for (auto& v : outMsg.twist.covariance) invalid |= fixNan(v);
+    if (invalid) return;
+    this->twistPub.publish(outMsg);
+  }
+
+
   void processGpst(const TimeReference& msg) const
   {
     UPDATE_THREAD_NAME
@@ -721,6 +770,12 @@ struct SeptentrioProcess :
 
   Subscriber<VelCovGeodetic> velCovGeodeticSub;
   Publisher<VelCovGeodetic> velCovGeodeticPub;
+
+  Subscriber<geometry_msgs::msg::PoseWithCovarianceStamped> poseSub;
+  Publisher<geometry_msgs::msg::PoseWithCovarianceStamped> posePub;
+
+  Subscriber<geometry_msgs::msg::TwistWithCovarianceStamped> twistSub;
+  Publisher<geometry_msgs::msg::TwistWithCovarianceStamped> twistPub;
 
   Publisher<Azimuth> azimuthPub;
   Publisher<Imu> imuPub;
