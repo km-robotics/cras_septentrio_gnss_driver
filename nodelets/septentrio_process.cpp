@@ -137,7 +137,8 @@ template<typename T> struct Publisher : rclcpp::Publisher<T>::SharedPtr
   Publisher& operator=(Publisher&& shared) noexcept
   {
     if (this != &shared)
-      static_cast<typename rclcpp::Publisher<T>::SharedPtr&>(*this) = static_cast<typename rclcpp::Publisher<T>::SharedPtr&&>(shared);
+      static_cast<typename rclcpp::Publisher<T>::SharedPtr&>(*this) =
+          static_cast<typename rclcpp::Publisher<T>::SharedPtr&&>(shared);
     return *this;
   }
 
