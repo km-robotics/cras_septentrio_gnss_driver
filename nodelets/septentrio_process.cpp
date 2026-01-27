@@ -124,24 +124,25 @@ template<typename T> struct Publisher : rclcpp::Publisher<T>::SharedPtr
 {
   Publisher() : rclcpp::Publisher<T>::SharedPtr(nullptr) {}
   Publisher(const Publisher& other) :
-    rclcpp::Publisher<T>::SharedPtr(static_cast<const rclcpp::Publisher<T>::SharedPtr&>(other)) {}
+    rclcpp::Publisher<T>::SharedPtr(static_cast<const typename rclcpp::Publisher<T>::SharedPtr&>(other)) {}
   Publisher(Publisher&& other) noexcept :
-    rclcpp::Publisher<T>::SharedPtr(static_cast<rclcpp::Publisher<T>::SharedPtr&&>(other)) {}
+    rclcpp::Publisher<T>::SharedPtr(static_cast<typename rclcpp::Publisher<T>::SharedPtr&&>(other)) {}
   Publisher& operator=(const Publisher& shared)
   {
     if (this != &shared)
-      static_cast<rclcpp::Publisher<T>::SharedPtr&>(*this) =
-        static_cast<const rclcpp::Publisher<T>::SharedPtr&>(shared);
+      static_cast<typename rclcpp::Publisher<T>::SharedPtr&>(*this) =
+        static_cast<const typename rclcpp::Publisher<T>::SharedPtr&>(shared);
     return *this;
   }
   Publisher& operator=(Publisher&& shared) noexcept
   {
     if (this != &shared)
-      static_cast<rclcpp::Publisher<T>::SharedPtr&>(*this) = static_cast<rclcpp::Publisher<T>::SharedPtr&&>(shared);
+      static_cast<typename rclcpp::Publisher<T>::SharedPtr&>(*this) =
+          static_cast<typename rclcpp::Publisher<T>::SharedPtr&&>(shared);
     return *this;
   }
 
-  Publisher(const rclcpp::Publisher<T>::SharedPtr& other) : rclcpp::Publisher<T>::SharedPtr(other) {}  // NOLINT
+  Publisher(const typename rclcpp::Publisher<T>::SharedPtr& other) : rclcpp::Publisher<T>::SharedPtr(other) {}  // NOLINT
   template<typename M> void publish(const M& val) const { this->get()->publish(std::move(val)); }
 };
 
