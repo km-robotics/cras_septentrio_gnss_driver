@@ -14,6 +14,7 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -54,6 +55,7 @@
 
 #include <compass_interfaces/msg/azimuth.hpp>
 #include <geodesy/utm.h>
+#include <geographic_msgs/msg/geo_point.hpp>
 #include <geographic_msgs/msg/geo_pose.hpp>
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
@@ -692,22 +694,32 @@ struct SeptentrioProcess :
 #ifdef ROS2
     // Compute and publish UTM-relative pose
     try {
-      // Convert input pose position (longitude, latitude, height) to UTM
+      // Convert input pose position (longitude, latitude, height) to GeoPose.
       geographic_msgs::msg::GeoPose geo_pose;
-      geo_pose.position.latitude = outMsg.pose.pose.position.y;   // latitude
-      geo_pose.position.longitude = outMsg.pose.pose.position.x;  // longitude
-      geo_pose.position.altitude = outMsg.pose.pose.position.z;   // height
+      geo_pose.position.latitude = outMsg.pose.pose.position.y;
+      geo_pose.position.longitude = outMsg.pose.pose.position.x;
+      geo_pose.position.altitude = outMsg.pose.pose.position.z;
       geo_pose.orientation = outMsg.pose.pose.orientation;
 
       // Convert to UTM using geodesy
       geodesy::UTMPoint utm(geo_pose.position);
 
       // Find the center of the MGRS zone for this UTM point
-      geodesy::UTMPoint mgrs_center;
-      mgrs_center.zone = utm.zone;
-      mgrs_center.band = utm.band;
-      mgrs_center.easting = 500'000.0; // UTM zone center easting, meters.
-      mgrs_center.northing = (utm.northing >= 0 ? 10'000'000.0 : 0.0); // zone center northing, meters.
+      constexpr double zone_long_size = 6.0;
+      constexpr double band_lat_size = 8.0;
+      const double zone_middle_long = std::floor(geo_pose.position.longitude / zone_long_size) * zone_long_size + zone_long_size / 2.0;
+      const unsigned int band_index = static_cast<unsigned int>((geo_pose.position.latitude + 80.0) / band_lat_size);
+      const double band_min_lat = static_cast<double>(band_index) * band_lat_size - 80.0;
+      const double central_latitude = band_min_lat + band_lat_size / 2.0;
+      geographic_msgs::msg::GeoPoint mgrs_center_geopoint;
+      mgrs_center_geopoint.longitude = zone_middle_long;
+      mgrs_center_geopoint.latitude = central_latitude;
+      // We fix the zone with the first received fix in order to avoid zone
+      // changes during operation, which would cause jumps in the relative UTM
+      // pose.
+      // There will be a loss of precision if the first fix is not correct and
+      // results in a different zone.
+      static const auto mgrs_center = geodesy::UTMPoint{mgrs_center_geopoint};
 
       // Compute relative UTM pose
       geometry_msgs::msg::PoseWithCovarianceStamped utm_pose = outMsg;
