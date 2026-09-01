@@ -18,6 +18,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -254,7 +255,8 @@ struct SeptentrioProcess :
     this->poseSub = this->subscribe<PoseWithCovarianceStamped>(
         "raw/pose", 10, &SeptentrioProcess::processPose, this);
 #ifdef ROS2
-    // Publish relative UTM pose separately ((0, 0) is the UTM Zone center (with MGRS).
+    // Publish relative UTM pose separately ((500_000, 0) is the UTM Zone center
+    // in the North hemisphere and (500_000, 10_000_000) in the South one).
     this->poseRelativeUtmPub = this->advertise<PoseWithCovarianceStamped>("pose_relative_utm", 10);
 #endif
     this->twistPub = this->advertise<TwistWithCovarianceStamped>("twist", 10);
@@ -695,38 +697,35 @@ struct SeptentrioProcess :
     // Compute and publish UTM-relative pose
     try {
       // Convert input pose position (longitude, latitude, height) to GeoPose.
-      geographic_msgs::msg::GeoPose geo_pose;
-      geo_pose.position.latitude = outMsg.pose.pose.position.y;
-      geo_pose.position.longitude = outMsg.pose.pose.position.x;
-      geo_pose.position.altitude = outMsg.pose.pose.position.z;
-      geo_pose.orientation = outMsg.pose.pose.orientation;
+      geographic_msgs::msg::GeoPose geoPose;
+      geoPose.position.latitude = outMsg.pose.pose.position.y;
+      geoPose.position.longitude = outMsg.pose.pose.position.x;
+      geoPose.position.altitude = outMsg.pose.pose.position.z;
+      geoPose.orientation = outMsg.pose.pose.orientation;
 
-      // Convert to UTM using geodesy
-      geodesy::UTMPoint utm(geo_pose.position);
+      if (!this->firstUtmFix.has_value()) {
+        // Store the first UTM point to fix the UTM zone.
+        const auto firstFix = geodesy::UTMPoint(geoPose.position);
+        if (geodesy::isValid(firstFix)) {
+          firstUtmFix = firstFix;
+        }
+        else {
+          auto& clk = *this->get_clock();
+          RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 10'000,
+              "Cannot convert first pose to UTM: invalid coordinates (lat: %f, lon: %f, alt: %f)",
+              geoPose.position.latitude, geoPose.position.longitude, geoPose.position.altitude);
+          return;
+        }
+      }
 
-      // Find the center of the MGRS zone for this UTM point
-      constexpr double zone_long_size = 6.0;
-      constexpr double band_lat_size = 8.0;
-      const double zone_middle_long = std::floor(geo_pose.position.longitude / zone_long_size) * zone_long_size + zone_long_size / 2.0;
-      const unsigned int band_index = static_cast<unsigned int>((geo_pose.position.latitude + 80.0) / band_lat_size);
-      const double band_min_lat = static_cast<double>(band_index) * band_lat_size - 80.0;
-      const double central_latitude = band_min_lat + band_lat_size / 2.0;
-      geographic_msgs::msg::GeoPoint mgrs_center_geopoint;
-      mgrs_center_geopoint.longitude = zone_middle_long;
-      mgrs_center_geopoint.latitude = central_latitude;
-      // We fix the zone with the first received fix in order to avoid zone
-      // changes during operation, which would cause jumps in the relative UTM
-      // pose.
-      // There will be a loss of precision if the first fix is not correct and
-      // results in a different zone.
-      static const auto mgrs_center = geodesy::UTMPoint{mgrs_center_geopoint};
-
-      // Compute relative UTM pose
-      geometry_msgs::msg::PoseWithCovarianceStamped utm_pose = outMsg;
-      utm_pose.pose.pose.position.x = utm.easting - mgrs_center.easting;
-      utm_pose.pose.pose.position.y = utm.northing - mgrs_center.northing;
-      utm_pose.pose.pose.position.z = utm.altitude;
-      this->poseRelativeUtmPub.publish(utm_pose);
+      // Convert to UTM using geodesy with fixed zone
+      auto utmPoint = geodesy::UTMPoint{};
+      geodesy::fromMsg(geoPose.position, utmPoint, true /* force_zone */, firstUtmFix.value().band, firstUtmFix.value().zone);
+      geometry_msgs::msg::PoseWithCovarianceStamped utmPose = outMsg;
+      utmPose.pose.pose.position.x = utmPoint.easting;
+      utmPose.pose.pose.position.y = utmPoint.northing;
+      utmPose.pose.pose.position.z = utmPoint.altitude;
+      this->poseRelativeUtmPub.publish(utmPose);
     } catch (const std::exception& e) {
       RCLCPP_WARN(this->get_logger(), "Failed to convert pose to UTM: %s", e.what());
     }
@@ -835,6 +834,7 @@ struct SeptentrioProcess :
 
   mutable AttEulerConstPtr lastAtt;
   mutable AttCovEulerConstPtr lastAttCov;
+  mutable std::optional<geodesy::UTMPoint> firstUtmFix;
 
   // These maximum errors are used instead of do-not-use values or too large errors.
 
