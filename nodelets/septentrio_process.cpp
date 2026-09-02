@@ -17,6 +17,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -677,6 +678,14 @@ struct SeptentrioProcess :
     this->pvtGeodeticPub.publish(outMsg);
   }
 
+#ifdef ROS2
+  //! \brief Longitude of the central meridian of the given UTM zone [deg].
+  static double centralMeridianDeg(const uint8_t zone)
+  {
+    return (static_cast<double>(zone) - 1.0) * 6.0 - 180.0 + 3.0;
+  }
+#endif
+
   void processPose(const geometry_msgs::msg::PoseWithCovarianceStamped& msg) const
   {
     UPDATE_THREAD_NAME
@@ -694,41 +703,108 @@ struct SeptentrioProcess :
     this->posePub.publish(outMsg);
 
 #ifdef ROS2
-    // Compute and publish UTM-relative pose
-    try {
-      // Convert input pose position (longitude, latitude, height) to GeoPose.
-      geographic_msgs::msg::GeoPose geoPose;
-      geoPose.position.latitude = outMsg.pose.pose.position.y;
-      geoPose.position.longitude = outMsg.pose.pose.position.x;
-      geoPose.position.altitude = outMsg.pose.pose.position.z;
-      geoPose.orientation = outMsg.pose.pose.orientation;
+    // Compute and publish the UTM pose relative to a latched origin.
+    geographic_msgs::msg::GeoPoint geoPoint;
+    geoPoint.latitude = outMsg.pose.pose.position.y;
+    geoPoint.longitude = outMsg.pose.pose.position.x;
+    geoPoint.altitude = outMsg.pose.pose.position.z;
 
-      if (!this->firstUtmFix.has_value()) {
-        // Store the first UTM point to fix the UTM zone.
-        const auto firstFix = geodesy::UTMPoint(geoPose.position);
-        if (geodesy::isValid(firstFix)) {
-          firstUtmFix = firstFix;
-        }
-        else {
-          auto& clk = *this->get_clock();
-          RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 10'000,
-              "Cannot convert first pose to UTM: invalid coordinates (lat: %f, lon: %f, alt: %f)",
-              geoPose.position.latitude, geoPose.position.longitude, geoPose.position.altitude);
-          return;
-        }
+    auto& clk = *this->get_clock();
+
+    // Validate every message, not just the one that latches the origin: once the zone is forced, geodesy no
+    // longer derives (and thus no longer sanity-checks) the band from the latitude.
+    if (std::fabs(geoPoint.latitude) > 90.0 || std::fabs(geoPoint.longitude) > 180.0)
+    {
+      RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 10'000,
+        "Ignoring pose with out-of-range coordinates (lat: %f, lon: %f)",
+        geoPoint.latitude, geoPoint.longitude);
+      return;
+    }
+
+    if (!this->utmOrigin.has_value())
+    {
+      // Latch the UTM zone from the first valid fix so that the published coordinates stay continuous even
+      // if the robot later crosses a zone or a band boundary.
+      const auto firstFix = geodesy::UTMPoint(geoPoint);
+      if (!geodesy::isValid(firstFix))
+      {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 10000,
+          "Cannot convert first pose to UTM: outside the UTM limits (lat: %f, lon: %f), ignoring",
+          geoPoint.latitude, geoPoint.longitude);
+        return;
       }
 
-      // Convert to UTM using geodesy with fixed zone
-      auto utmPoint = geodesy::UTMPoint{};
-      geodesy::fromMsg(geoPose.position, utmPoint, true /* force_zone */, firstUtmFix.value().band, firstUtmFix.value().zone);
-      geometry_msgs::msg::PoseWithCovarianceStamped utmPose = outMsg;
-      utmPose.pose.pose.position.x = utmPoint.easting;
-      utmPose.pose.pose.position.y = utmPoint.northing;
-      utmPose.pose.pose.position.z = utmPoint.altitude;
-      this->poseRelativeUtmPub.publish(utmPose);
-    } catch (const std::exception& e) {
-      RCLCPP_WARN(this->get_logger(), "Failed to convert pose to UTM: %s", e.what());
+      // Center latitude of each MGRS latitude band, used as the northing origin. Band X spans 72..84 deg,
+      // every other band spans 8 deg. The polar bands A, B, Y, Z are UPS, not UTM, and isValid rejects them.
+      static const std::map<char, double> bandCenterLatitudeDeg = {
+        {'C', -76.0}, {'D', -68.0}, {'E', -60.0}, {'F', -52.0}, {'G', -44.0},
+        {'H', -36.0}, {'J', -28.0}, {'K', -20.0}, {'L', -12.0}, {'M', -4.0},
+        {'N', 4.0}, {'P', 12.0}, {'Q', 20.0}, {'R', 28.0}, {'S', 36.0},
+        {'T', 44.0}, {'U', 52.0}, {'V', 60.0}, {'W', 68.0}, {'X', 78.0},
+      };
+      const auto it = bandCenterLatitudeDeg.find(firstFix.band);
+      if (it == bandCenterLatitudeDeg.end())
+      {
+        RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 10'000,
+          "UTM band of first fix, '%c', is invalid, ignoring", firstFix.band);
+        return;
+      }
+
+      // Put the origin on the central meridian of the latched zone rather than on the longitude of the first
+      // fix, so that it depends only on (zone, band) and is therefore reproducible across restarts.
+      geographic_msgs::msg::GeoPoint originGeoPoint;
+      originGeoPoint.latitude = it->second;
+      originGeoPoint.longitude = centralMeridianDeg(firstFix.zone);
+      geodesy::UTMPoint origin;
+      geodesy::fromMsg(originGeoPoint, origin, true /* force_zone */, firstFix.band, firstFix.zone);
+      this->utmOrigin = origin;
     }
+
+    geodesy::UTMPoint utmPoint;
+    geodesy::fromMsg(geoPoint, utmPoint, true /* force_zone */, this->utmOrigin->band, this->utmOrigin->zone);
+
+    // geodesy applies the Norway and Svalbard special-case zones *after* honouring force_zone, so the forced
+    // zone can be silently overridden when crossing 56, 64, 72 or 84 deg latitude at 3..42 deg longitude.
+    // Dropping the pose is better than publishing a several-hundred-kilometre jump.
+    if (utmPoint.zone != this->utmOrigin->zone)
+    {
+      RCLCPP_WARN_THROTTLE(this->get_logger(), clk, 10'000,
+        "Forced UTM zone %u was overridden to %u by a special-case rule, ignoring pose",
+        static_cast<unsigned>(this->utmOrigin->zone), static_cast<unsigned>(utmPoint.zone));
+      return;
+    }
+
+    auto utmPose = outMsg;
+    utmPose.pose.pose.position.x = utmPoint.easting - this->utmOrigin->easting;
+    utmPose.pose.pose.position.y = utmPoint.northing - this->utmOrigin->northing;
+    utmPose.pose.pose.position.z = utmPoint.altitude;
+
+    // The receiver reports the heading as an azimuth clockwise from TRUE north and the driver puts that value
+    // straight into the yaw of the pose orientation, but the position above is referenced to GRID north. The
+    // two differ by the meridian convergence: -0.44 deg in Prague, up to 2.3 deg at the edge of a zone at our
+    // latitudes. That is a systematic bias rather than noise, so it is compensated here.
+    // gamma = atan(tan(lon - centralMeridian) * sin(lat)) matches the exact ellipsoidal value to better than
+    // 0.1 arcsecond over a whole zone, which is why a closed form is used instead of a lookup table.
+    // Grid azimuth = true azimuth - gamma, hence the rotation by -gamma about Z. If the driver is ever fixed
+    // to publish a proper ENU yaw (counter-clockwise from East), this sign has to be flipped.
+    const auto lonFromCentralMeridianDeg =
+      std::remainder(geoPoint.longitude - centralMeridianDeg(this->utmOrigin->zone), 360.0);
+    const auto convergence = std::atan(
+      std::tan(lonFromCentralMeridianDeg * M_PI / 180.0) * std::sin(geoPoint.latitude * M_PI / 180.0));
+
+    tf2::Quaternion orientation;
+    tf2::fromMsg(outMsg.pose.pose.orientation, orientation);
+    tf2::Quaternion convergenceRotation;
+    convergenceRotation.setRPY(0.0, 0.0, -convergence);
+    utmPose.pose.pose.orientation = tf2::toMsg(convergenceRotation * orientation);
+
+    // The covariance is passed through unrotated and unscaled. Strictly, the position block should be rotated
+    // by the meridian convergence and scaled by the UTM point scale factor k (0.9996 on the central meridian,
+    // 1.0002 at the edge of a zone at our latitudes). For the 0.15 m position errors this node lets through,
+    // both corrections stay below 0.1 mm, so they are deliberately omitted. Note however that the published
+    // coordinates are grid coordinates: distances between them differ from ground distances by up to ~0.02 %,
+    // i.e. a few centimetres over the few hundred metres of travel this frame is meant for.
+    this->poseRelativeUtmPub.publish(utmPose);
 #endif
   }
 
@@ -834,7 +910,7 @@ struct SeptentrioProcess :
 
   mutable AttEulerConstPtr lastAtt;
   mutable AttCovEulerConstPtr lastAttCov;
-  mutable std::optional<geodesy::UTMPoint> firstUtmFix;
+  mutable std::optional<geodesy::UTMPoint> utmOrigin;  //!< Latched origin of the pose_relative_utm frame.
 
   // These maximum errors are used instead of do-not-use values or too large errors.
 
